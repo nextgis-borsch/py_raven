@@ -91,20 +91,32 @@ else()
     set(PYTHON_EXECUTABLE ${PYTHON3_EXECUTABLE})
 endif()
 
-file(DOWNLOAD "https://pypi.python.org/pypi/${PROJECT_NAME}/json" "${CMAKE_CURRENT_BINARY_DIR}/meta.json")
+file(GLOB LOCAL_SOURCES_ARCHIVES LIST_DIRECTORIES false "*.tar.gz")
+if(LOCAL_SOURCES_ARCHIVES)
+    list(GET LOCAL_SOURCES_ARCHIVES 0 LOCAL_SOURCES_ARCHIVE)
+    string(REPLACE ".tar.gz" "" LOCAL_SOURCES_VERSION ${LOCAL_SOURCES_ARCHIVE})
+    string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" LOCAL_SOURCES_VERSION ${LOCAL_SOURCES_VERSION})
+    string(SUBSTRING ${LOCAL_SOURCES_VERSION} 8 -1 VERSION)
+    message(STATUS "Local sources found: ${LOCAL_SOURCES_ARCHIVE}, version: ${VERSION}")
+endif()
 
 include(util)
 get_compiler_version(COMPILER)
-# get version and download url
-execute_process(COMMAND ${PYTHON_EXECUTABLE}
-    ${CMAKE_SOURCE_DIR}/cmake/pypi_process.py ${PLUGIN} ${CMAKE_CURRENT_BINARY_DIR}/meta.json ${COMPILER}
-    OUTPUT_VARIABLE PACKAGE_DETAILS
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
 
-list(GET PACKAGE_DETAILS 0 DOWNLOAD_URL)
-list(GET PACKAGE_DETAILS 1 VERSION)
-list(GET PACKAGE_DETAILS 2 PROJECT_CPACK_FILENAME)
+if(NOT LOCAL_SOURCES_ARCHIVE)
+    file(DOWNLOAD "https://pypi.python.org/pypi/${PROJECT_NAME}/json" "${CMAKE_CURRENT_BINARY_DIR}/meta.json")
+
+    # get version and download url
+    execute_process(COMMAND ${PYTHON_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/cmake/pypi_process.py ${PLUGIN} ${CMAKE_CURRENT_BINARY_DIR}/meta.json ${COMPILER}
+        OUTPUT_VARIABLE PACKAGE_DETAILS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    list(GET PACKAGE_DETAILS 0 DOWNLOAD_URL)
+    list(GET PACKAGE_DETAILS 1 VERSION)
+    list(GET PACKAGE_DETAILS 2 PROJECT_CPACK_FILENAME)
+endif()
 
 report_version(${PROJECT_NAME} ${VERSION})
 
@@ -143,11 +155,15 @@ set(BUILD_INCLUDES ${BUILD_INCLUDES} -q)
 set(OUT_DIR_NAME ${PROJECT_NAME}-${VERSION})
 set(OUT_NAME "${OUT_DIR_NAME}.tar.gz")
 
-if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${OUT_NAME}")
-    status_message("Download ${DOWNLOAD_URL}")
-    file(DOWNLOAD "${DOWNLOAD_URL}" "${CMAKE_CURRENT_BINARY_DIR}/${OUT_NAME}"
-        SHOW_PROGRESS
-    )
+if(LOCAL_SOURCES_ARCHIVE)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${OUT_NAME} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+else()
+    if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${OUT_NAME}")
+        status_message("Download ${DOWNLOAD_URL}")
+        file(DOWNLOAD "${DOWNLOAD_URL}" "${CMAKE_CURRENT_BINARY_DIR}/${OUT_NAME}"
+            SHOW_PROGRESS
+        )
+    endif()
 endif()
 
 # Extract archive
@@ -157,16 +173,22 @@ if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/${OUT_DIR_NAME})
 endif()
 
 macro(build_py ver)
+
+    if(CMAKE_VERSION VERSION_LESS 3)
+        set(PY_CMD ${PYTHON${ver}_EXECUTABLE})
+    else()
+        set(PY_CMD ${CMAKE_COMMAND} -E env "${FLAGS}" ${PYTHON${ver}_EXECUTABLE})
+    endif()
+
+
     status_message("Configuring ...")
-    execute_process(COMMAND ${CMAKE_COMMAND} -E env "${FLAGS}"
-        ${PYTHON${ver}_EXECUTABLE} setup.py build ${BUILD_INCLUDES}
+    execute_process(COMMAND ${PY_CMD} setup.py build ${BUILD_INCLUDES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${OUT_DIR_NAME}
         OUTPUT_QUIET ERROR_QUIET
     )
 
     add_custom_target(build_py${ver} ALL
-        COMMAND ${CMAKE_COMMAND} -E env "${FLAGS}"
-        ${PYTHON${ver}_EXECUTABLE} setup.py build_ext ${BUILD_INCLUDES}
+        COMMAND ${PY_CMD} setup.py build_ext ${BUILD_INCLUDES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${OUT_DIR_NAME}
         VERBATIM
     )
@@ -187,30 +209,29 @@ except ImportError:
 
         execute_process ( COMMAND ${PYTHON${ver}_EXECUTABLE} -c ${TEST_CMD} OUTPUT_VARIABLE PY_HAVE_SETUPTOOLS OUTPUT_STRIP_TRAILING_WHITESPACE)
         if(PY_HAVE_SETUPTOOLS)
-            set(SETUP_OPTS "${SETUP_OPTS} --no-compile --single-version-externally-managed --record=rekord.txt")
+            set(SETUP_OPTS ${SETUP_OPTS} --no-compile --single-version-externally-managed --record=rekord.txt)
         endif()
 
         string( LENGTH "$ENV{DESTDIR}" DESTDIRLEN )
         if ( ${DESTDIRLEN} GREATER 0 )
-            set(SETUP_OPTS "${SETUP_OPTS} --root=$ENV{DESTDIR}")
+            set(SETUP_OPTS ${SETUP_OPTS} --root=$ENV{DESTDIR})
         elseif(PYTHON_DESTDIR)
-            set(SETUP_OPTS "${SETUP_OPTS} --root=${PYTHON_DESTDIR}")
+            set(SETUP_OPTS ${SETUP_OPTS} --root=${PYTHON_DESTDIR})
         endif()
 
         # check debian
         string(FIND ${PY_SITE_PACKAGES} "dist-packages" PY_DIST_POS)
         if(${PY_DIST_POS} GREATER -1)
-            set(SETUP_OPTS "${SETUP_OPTS} --install-layout=deb")
+            set(SETUP_OPTS ${SETUP_OPTS} --install-layout=deb)
         endif()
 
         # TODO: do we need --install-lib=$(PYTHON_INSTALL_LIB) ?
 
-        set(SETUP_OPTS "${SETUP_OPTS} --prefix=${CMAKE_CURRENT_BINARY_DIR}/inst_tmp")
+        set(SETUP_OPTS ${SETUP_OPTS} --prefix=${CMAKE_CURRENT_BINARY_DIR}/inst_tmp)
 
     endif()
     add_custom_target(install_py${ver} ALL
-        COMMAND ${CMAKE_COMMAND} -E env "${FLAGS}"
-        ${PYTHON${ver}_EXECUTABLE} setup.py install ${SETUP_OPTS}
+        COMMAND ${PY_CMD} setup.py install ${SETUP_OPTS}
         DEPENDS build_py${ver}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${OUT_DIR_NAME}
         VERBATIM
