@@ -1,5 +1,5 @@
 ################################################################################
-# Project:  Lib Psycopg
+# Project:  Python packages
 # Purpose:  CMake build scripts
 # Author:   Dmitry Baryshnikov, dmitry.baryshnikov@nexgis.com
 ################################################################################
@@ -41,7 +41,7 @@ set(CMAKE_COLOR_MAKEFILE ON)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
 if(OSX_FRAMEWORK)
-  set(INSTALL_LIB_DIR "Library" CACHE INTERNAL "Installation directory for libraries" FORCE)
+    set(INSTALL_LIB_DIR "Library" CACHE INTERNAL "Installation directory for libraries" FORCE)
 else()
     set(INSTALL_LIB_DIR "." CACHE INTERNAL "Installation directory for libraries" FORCE)
 endif()
@@ -96,7 +96,7 @@ if(LOCAL_SOURCES_ARCHIVES)
     list(GET LOCAL_SOURCES_ARCHIVES 0 LOCAL_SOURCES_ARCHIVE)
     string(REPLACE ".tar.gz" "" LOCAL_SOURCES_VERSION ${LOCAL_SOURCES_ARCHIVE})
     string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" LOCAL_SOURCES_VERSION ${LOCAL_SOURCES_VERSION})
-    string(SUBSTRING ${LOCAL_SOURCES_VERSION} 7 -1 VERSION) 
+    string(SUBSTRING ${LOCAL_SOURCES_VERSION} 7 -1 VERSION)
     message(STATUS "Local sources found: ${LOCAL_SOURCES_ARCHIVE}, version: ${VERSION}")
 endif()
 
