@@ -1,7 +1,7 @@
-# setuptools
+# raven
 
-Easily download, build, install, upgrade, and uninstall Python packages
+Raven is a client for Sentry (https://getsentry.com)
 
 # Version
 
-39.1.0 [Apr 28, 2018]
+6.8.0 [May 12, 2018]
